@@ -1,0 +1,152 @@
+---
+title: "Linking R Markdown to Zotero Citation Manager"
+output: html_notebook
+bibliography: reference.bib
+---
+
+[R Markdown](http://rmarkdown.rstudio.com) offers a useful simple syntax for editing documents and out-putting these to multiple formats.  [Zotero](http://zotero.org) offers a free citation manager.  There is a Zotero add-in for R Studio which will let users cite within markdown with relative ease.  However, this requires that Zotero client is installed (and running) on the same machine as R Studio.  Zotero is cloud store and has an API.  Users of R Studio Server edition may find the following method helpful (and this should work for R Studio Desktop installs too).
+
+## Asumptions
+
+There are a few assumptions:
+
+* You have already signed up for a free zotero account
+* You had added some citations to zotero
+* You have internet access to be able to connect to the API
+
+### Requirements
+Your R install will also need the following packages installed:
+
+* RefManageR
+* tidyverse
+* bibtex
+
+pasting the line below into the R Console would sort that if you haven't already got them installed:
+
+>
+> install.packages(c("RefManageR", "tidyverse", "bibtex"))
+>
+
+### Setting up access to your Zotero
+Before you start in R Studio, you need to create an access key in Zotero.  This is probably the hardest step to explain:
+
+* Log-in to Zotero.org and click the arrow next to your username on the top menu bar
+* Click "My Profile"
+* Click "Edit Profile"
+* Click "Feeds/API"
+* Click "Create New Private Key"  [This link](https://www.zotero.org/settings/keys/new)may well take you directly there if already logged in
+* Name your Key something like "R Studio"
+* Allow third party library access
+* If your Zotero is using "Groups" you will want to configure access correctly
+* Copy the Key to a text editor - you need this to connect and you can't retrieve it later!  I've pasted mine into a file called "Zotero.key" which is saved in the same file as my working code for this project but is added to my .gitignore file so that I'm not sharing it publically.
+
+## Import the Zotero Library into R
+OK So now its time to get R doing some work for us.
+
+```{r}
+# Start by loading the Zotero Key. Alternatively you could simply paste your key
+# using this:
+# myZoteroKey <- "DfDfDfDfDfDfDfDfDfDfDf"
+
+fileName <- 'Zotero.key'
+myZoteroKey <- readChar(fileName, file.info(fileName)$size)
+```
+
+Now we need to return to Zotero to get a couple of other pieces of information:
+
+* User*number* (different from username)
+* Collection ID
+
+### Usernumber
+For some reason you need a usernumber rather than your username.  Just above the link that created a new API Key in Zotero is a sentence like this: 
+
+> Your userID for use in API calls is 12345678
+
+That is the number you need.
+
+### Collection ID
+The easiest way I find to get this, is to go to your Zotero and navigate to the collection you are planning to reference, and then copy the URL. It should look something like this:
+
+https://www.zotero.org/myLoginName/collections/**1AAAA1AA**
+
+You are interested in the "random" string at the end (1AAAA1AA in this example).
+
+```{r}
+# Set up the userID and collectionID
+
+userID <- "2842942"
+collectionID <- "9SAQWDAE"
+```
+
+### Call the Zotero API
+```{r}
+# Connect to ZoteroBibliography Manager
+require(RefManageR)
+require(tidyverse)
+require(bibtex)
+zotero <- ReadZotero(
+  user = userID,
+  .params = list(
+    collection = collectionID, 
+    key = myZoteroKey
+    )
+  )
+
+# Show first 4 entries
+zotero[1:4]
+```
+
+This should now have created a List in R called "zotero" which contains your library.  However, navigating this dataframe to find your references can be quite 'challenging' so we use Tidyverse to make it easier to work with.
+
+```{r}
+#Build a data frame to find the references easier
+refs <- zotero %>% {
+  .$title
+} %>%
+  bind_rows() %>%
+  gather(key = 'key', value = 'title', 1:length(zotero))
+
+# Show first 4 rows
+head(refs, 4)
+```
+
+You now have a second data frame, this time called 'refs' which you can call using view(refs) and will then be able to identify the keys to cite with.
+
+### Save the references somewhere sensible 
+Latex needs to be able to access the reference manager, so the file needs saved somewhere sensible that it can access them.  For example reference.bib in the working directory.  (Beware that will save over the file so if you edit it and re-import from zotero any saves are lost)
+
+Be sure to add a YAML header entry to tell Latex where to find the file. for example:
+
+>
+> bibliography: /home/myusername/myproject/reference.bib
+>
+
+```{r}
+write.bib(zotero, 'reference.bib')
+
+```
+
+## Now lets do some citing
+
+You can now write your amazing article, report, thesis or whatever else and use the following style to cite in your article. Depending on your setup of your latex templates etc you can then produce citations as (numerals) in parethesis, ^numerals^ as superscripts or (Author, Date), along with fully formatted bibliography/references.
+
+The citation method is:  (See [this link](https://rmarkdown.rstudio.com/authoring_bibliographies_and_citations.html) for more info)
+
+>
+> `[@citationKey]`
+>
+
+> A paragraph like this, which cites `[@calvert_carboplatin_1989]` as evidence of something really important, and which also cites `[@cockcroft_prediction_1976]`
+
+will then appear in final output something like this
+
+
+> A paragraph like this, which cites [@calvert_carboplatin_1989] as evidence of something really important, and which also cites [@cockcroft_prediction_1976]
+
+
+
+
+At the very end of your document, you may need to add a header called 'references' but Rmarkdown should then make the very end of the document have the references
+
+# References
+
